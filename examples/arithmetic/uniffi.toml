@@ -10,3 +10,7 @@ cdylib_name = "arithmetical"
 
 [bindings.swift]
 cdylib_name = "arithmetical"
+
+[bindings.golang]
+package_name = "arithmetic"
+cdylib_name = "arithmetical"

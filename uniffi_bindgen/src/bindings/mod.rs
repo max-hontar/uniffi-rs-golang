@@ -14,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use crate::interface::ComponentInterface;
 use crate::MergeWith;
 
+pub mod golang;
 pub mod kotlin;
 pub mod python;
 pub mod ruby;
@@ -31,6 +32,7 @@ pub enum TargetLanguage {
     Swift,
     Python,
     Ruby,
+    Golang,
 }
 
 /// Mode for the `run_script` function defined for each language
@@ -55,6 +57,7 @@ impl TryFrom<&str> for TargetLanguage {
             "swift" => TargetLanguage::Swift,
             "python" | "py" => TargetLanguage::Python,
             "ruby" | "rb" => TargetLanguage::Ruby,
+            "golang" | "go" => TargetLanguage::Golang,
             _ => bail!("Unknown or unsupported target language: \"{value}\""),
         })
     }
@@ -87,6 +90,8 @@ pub struct Config {
     python: python::Config,
     #[serde(default)]
     ruby: ruby::Config,
+    #[serde(default)]
+    golang: golang::Config,
 }
 
 impl From<&ComponentInterface> for Config {
@@ -96,6 +101,7 @@ impl From<&ComponentInterface> for Config {
             swift: ci.into(),
             python: ci.into(),
             ruby: ci.into(),
+            golang: ci.into(),
         }
     }
 }
@@ -107,6 +113,7 @@ impl MergeWith for Config {
             swift: self.swift.merge_with(&other.swift),
             python: self.python.merge_with(&other.python),
             ruby: self.ruby.merge_with(&other.ruby),
+            golang: self.golang.merge_with(&other.golang),
         }
     }
 }
@@ -129,7 +136,12 @@ pub fn write_bindings(
         TargetLanguage::Python => {
             python::write_bindings(&config.python, ci, out_dir, try_format_code)?
         }
-        TargetLanguage::Ruby => ruby::write_bindings(&config.ruby, ci, out_dir, try_format_code)?,
+        TargetLanguage::Ruby => {
+            ruby::write_bindings(&config.ruby, ci, out_dir, try_format_code)?
+        }
+        TargetLanguage::Golang => {
+            golang::write_bindings(&config.golang, ci, out_dir, try_format_code)?
+        }
     }
     Ok(())
 }

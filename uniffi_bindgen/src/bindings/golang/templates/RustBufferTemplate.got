@@ -1,0 +1,25 @@
+type _UniFFIConverterRustBuffer struct {}
+
+var FFIConverterRustBuffer = _UniFFIConverterRustBuffer{}
+
+func (_UniFFIConverterRustBuffer) lower(bz []byte) unsafe.Pointer {
+	if bz == nil {
+		return nil
+	}
+
+	return C.CBytes(bz)
+}
+
+func (_UniFFIConverterRustBuffer) lift(b C.RustBuffer) ([]byte, error) {
+	if b.data == nil {
+		return nil, nil
+	}
+
+	result := C.GoBytes(unsafe.Pointer(b.data), b.len)
+	var status C.RustCallStatus
+	C.{{ ci.ffi_rustbuffer_free().name() }}(b, &status)
+	if int8(status.code) != 0 {
+		return nil, NewUniffiInternalError(RustPanic, "Can't free buffer")
+	}
+	return result, nil
+}

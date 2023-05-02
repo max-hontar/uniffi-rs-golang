@@ -1,0 +1,11 @@
+type _UniFfiConverterUint64 struct {}
+
+var FfiConverterUint64 = _UniFfiConverterUint64{}
+
+func (_UniFfiConverterUint64) lift(u C.uint64_t) uint64 {
+	return uint64(u)
+}
+
+func (_UniFfiConverterUint64) lower(u uint64) C.uint64_t {
+	return C.uint64_t(u)
+}

@@ -10,8 +10,12 @@ publish = false
 crate-type = ["lib", "cdylib"]
 name = "arithmetical"
 
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
 [dependencies]
-uniffi = {path = "../../uniffi"}
+uniffi = { path = "../../uniffi", features = ["cli"] }
 thiserror = "1.0"
 
 [build-dependencies]

@@ -1,0 +1,13 @@
+type _UniFfiConverterString struct {}
+
+var FfiConverterString = _UniFfiConverterString{}
+
+func (_UniFfiConverterString) lift(b C.RustBuffer) string {
+    res := string(C.GoBytes(unsafe.Pointer(b.data), b.len))
+    C.free(unsafe.Pointer(b.data))
+	return res
+}
+
+func (_UniFfiConverterString) lower(s string) *C.char {
+	return C.CString(s)
+}

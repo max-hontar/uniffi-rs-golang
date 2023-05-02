@@ -1,0 +1,94 @@
+// UniffiInternalError An error type for FFI errors. These errors occur at the UniFFI level, not
+// the library level.
+type UniffiInternalError struct {
+	code UniffiInternalErrorCode
+	msg  string
+}
+
+func NewUniffiInternalError(code UniffiInternalErrorCode, msg string) *UniffiInternalError {
+    if stdMsg, ok := UniffiInternalErrorMessageMap[code]; ok {
+        msg = stdMsg
+    }
+    return &UniffiInternalError{code: code, msg: msg}
+}
+
+func (e UniffiInternalError) Error() string {
+    return e.msg
+}
+
+type UniffiInternalErrorCode int
+
+const (
+    BufferOverflow UniffiInternalErrorCode = iota
+    IncompleteData
+    UnexpectedOptionalTag
+    UnexpectedEnumCase
+    UnexpectedNullPointer
+    UnexpectedRustCallStatusCode
+    UnexpectedRustCallError
+    UnexpectedStaleHandle
+    RustPanic
+)
+
+var UniffiInternalErrorMessageMap = map[UniffiInternalErrorCode]string {
+	BufferOverflow: "Reading the requested value would read past the end of the buffer",
+    IncompleteData: "The buffer still has data after lifting its containing value",
+    UnexpectedOptionalTag: "Unexpected optional tag; should be 0 or 1",
+    UnexpectedEnumCase: "Raw enum value doesn't match any cases",
+    UnexpectedNullPointer: "Raw pointer value was null",
+    UnexpectedRustCallStatusCode: "Unexpected RustCallStatus code",
+    UnexpectedRustCallError: "CALL_ERROR but no errorClass specified",
+    UnexpectedStaleHandle: "The object in the handle map has been dropped already",
+    RustPanic: "Custom message! How???",
+}
+
+const (
+    CallSuccess int8 = iota
+    CallError
+    CallPanic
+)
+
+{# Commented SWIFT implementation!!!
+
+private func rustCall<T>(_ callback: (UnsafeMutablePointer<RustCallStatus>) -> T) throws -> T {
+    try makeRustCall(callback, errorHandler: {
+        $0.deallocate()
+        return UniffiInternalError.unexpectedRustCallError
+    })
+}
+
+private func rustCallWithError<T, F: FfiConverter>
+    (_ errorFfiConverter: F.Type, _ callback: (UnsafeMutablePointer<RustCallStatus>) -> T) throws -> T
+    where F.GolangType: Error, F.FfiType == RustBuffer
+    {
+    try makeRustCall(callback, errorHandler: { return try errorFfiConverter.lift($0) })
+}
+
+private func makeRustCall<T>(_ callback: (UnsafeMutablePointer<RustCallStatus>) -> T, errorHandler: (RustBuffer) throws -> Error) throws -> T {
+    uniffiCheckFfiVersionMismatch()
+    var callStatus = RustCallStatus.init()
+    let returnedVal = callback(&callStatus)
+    switch callStatus.code {
+        case CALL_SUCCESS:
+            return returnedVal
+
+        case CALL_ERROR:
+            throw try errorHandler(callStatus.errorBuf)
+
+        case CALL_PANIC:
+            // When the rust code sees a panic, it tries to construct a RustBuffer
+            // with the message.  But if that code panics, then it just sends back
+            // an empty buffer.
+            if callStatus.errorBuf.len > 0 {
+                throw UniffiInternalError.rustPanic(try {{ Type::String.borrow()|lift_fn }}(callStatus.errorBuf))
+            } else {
+                callStatus.errorBuf.deallocate()
+                throw UniffiInternalError.rustPanic("Rust panic")
+            }
+
+        default:
+            throw UniffiInternalError.unexpectedRustCallStatusCode
+    }
+}
+
+#}

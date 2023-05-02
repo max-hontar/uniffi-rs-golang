@@ -1,0 +1,15 @@
+type _UniFfiConverterBool struct {}
+
+var FfiConverterBool = _UniFfiConverterBool{}
+
+func (_UniFfiConverterBool) lift(b C.int8_t) bool {
+	return b != 0
+}
+
+func (_UniFfiConverterBool) lower(b bool) C.int8_t {
+    var res C.int8_t
+    if b {
+        res = 1
+    }
+	return res
+}

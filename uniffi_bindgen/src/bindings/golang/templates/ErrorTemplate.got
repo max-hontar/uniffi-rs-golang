@@ -1,0 +1,128 @@
+{%- let e = ci.get_error_definition(name).unwrap() %}
+
+{#
+
+public enum {{ type_name }} {
+
+    {% if e.is_flat() %}
+    {% for variant in e.variants() %}
+    // Simple error enums only carry a message
+    case {{ variant.name()|class_name }}(message: String)
+    {% endfor %}
+
+    {%- else %}
+    {% for variant in e.variants() %}
+    case {{ variant.name()|class_name }}{% if variant.fields().len() > 0 %}({% call golang::field_list_decl(variant) %}){% endif -%}
+    {% endfor %}
+
+    {%- endif %}
+}
+
+public struct {{ ffi_converter_name }}: FfiConverterRustBuffer {
+    typealias GolangType = {{ type_name }}
+
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> {{ type_name }} {
+        let variant: Int32 = try readInt(&buf)
+        switch variant {
+
+        {% if e.is_flat() %}
+
+        {% for variant in e.variants() %}
+        case {{ loop.index }}: return .{{ variant.name()|class_name }}(
+            message: try {{ Type::String.borrow()|read_fn }}(from: &buf)
+        )
+        {% endfor %}
+
+        {% else %}
+
+        {% for variant in e.variants() %}
+        case {{ loop.index }}: return .{{ variant.name()|class_name }}{% if variant.has_fields() -%}(
+            {% for field in variant.fields() -%}
+            {{ field.name()|var_name }}: try {{ field|read_fn }}(from: &buf)
+            {%- if !loop.last %}, {% endif %}
+            {% endfor -%}
+        ){% endif -%}
+        {% endfor %}
+
+         {% endif -%}
+        default: throw UniffiInternalError.unexpectedEnumCase
+        }
+    }
+
+    public static func write(_ value: {{ type_name }}, into buf: inout [UInt8]) {
+        switch value {
+
+        {% if e.is_flat() %}
+
+        {% for variant in e.variants() %}
+        case let .{{ variant.name()|class_name }}(message):
+            writeInt(&buf, Int32({{ loop.index }}))
+            {{ Type::String.borrow()|write_fn }}(message, into: &buf)
+        {%- endfor %}
+
+        {% else %}
+
+        {% for variant in e.variants() %}
+        {% if variant.has_fields() %}
+        case let .{{ variant.name()|class_name }}({% for field in variant.fields() %}{{ field.name()|var_name }}{%- if loop.last -%}{%- else -%},{%- endif -%}{% endfor %}):
+            writeInt(&buf, Int32({{ loop.index }}))
+            {% for field in variant.fields() -%}
+            {{ field|write_fn }}({{ field.name()|var_name }}, into: &buf)
+            {% endfor -%}
+        {% else %}
+        case .{{ variant.name()|class_name }}:
+            writeInt(&buf, Int32({{ loop.index }}))
+        {% endif %}
+        {%- endfor %}
+
+        {%- endif %}
+        }
+    }
+}
+
+{% if !contains_object_references %}
+extension {{ type_name }}: Equatable, Hashable {}
+{% endif %}
+extension {{ type_name }}: Error { }
+
+#}
+
+type {{ type_name }}Code uint32
+
+func (c {{ type_name }}Code) String() string {
+	return {{ type_name }}CodeMap[c]
+}
+
+const (
+    {% for variant in e.variants() -%}
+    {{ variant.name()|class_name }} {% if loop.first %}{{ type_name }}Code = iota + 1{% endif %}
+    {%- endfor %}
+)
+
+var {{ type_name }}CodeMap = map[{{ type_name }}Code]string{
+    {% for variant in e.variants() -%}
+    {{ variant.name()|class_name }}: "{{ variant.name()|class_name }}",
+    {%- endfor %}
+}
+
+type {{ type_name }} struct {
+	Code {{ type_name }}Code
+	Msg  string
+}
+
+func (e {{ type_name }}) Error() string {
+	return fmt.Sprintf("code: %s, message: %s", e.Code, e.Msg)
+}
+
+type _UniFfiConverterType{{ type_name }} struct {}
+
+var FfiConverterType{{ type_name }} = _UniFfiConverterType{{ type_name }}{}
+
+func (_UniFfiConverterType{{ type_name }}) lift(b C.RustBuffer) {{ type_name }} {
+    bz := C.GoBytes(unsafe.Pointer(b.data), b.len)
+    C.free(unsafe.Pointer(b.data))
+	return {{ type_name }} {
+	    Code: {{ type_name }}Code(binary.BigEndian.Uint32(bz[:4])),
+	    Msg: string(bz[8:]),
+	}
+}
